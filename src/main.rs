@@ -1,165 +1,94 @@
 use bevy::{
     prelude::*,
-    render::{
-        camera::RenderTarget,
-        render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-        },
-        view::RenderLayers,
-    },
-    window::WindowResized,
+    window::{PrimaryWindow, WindowResized},
 };
 
-/// In-game resolution width.
-const RES_WIDTH: u32 = 160;
-
-/// In-game resolution height.
-const RES_HEIGHT: u32 = 90;
-
-/// Default render layers for pixel-perfect rendering.
-/// You can skip adding this component, as this is the default.
-const PIXEL_PERFECT_LAYERS: RenderLayers = RenderLayers::layer(0);
-
-/// Render layers for high-resolution rendering.
-const HIGH_RES_LAYERS: RenderLayers = RenderLayers::layer(1);
-
-fn main() {
+fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_systems(Startup, (setup_camera, setup_button, setup_mesh))
-        .add_systems(Update, fit_canvas)
-        .run();
+        .init_state::<AppState>()
+        .enable_state_scoped_entities::<AppState>()
+        .add_systems(Startup, setup)
+        .add_systems(Update, (toggle_state, update_window_status))
+        .add_systems(OnEnter(AppState::Artifacting), setup_artifacting_texture)
+        .add_systems(OnEnter(AppState::Clean), setup_clean_texture)
+        .run()
 }
 
-/// Low-resolution texture that contains the pixel-perfect world.
-/// Canvas itself is rendered to the high-resolution world.
-#[derive(Component)]
-struct Canvas;
-
-/// Camera that renders the pixel-perfect world to the [`Canvas`].
-#[derive(Component)]
-struct InGameCamera;
-
-/// Camera that renders the [`Canvas`] (and other graphics on [`HIGH_RES_LAYERS`]) to the screen.
-#[derive(Component)]
-struct OuterCamera;
-
-#[derive(Component)]
-struct Rotate;
-
-fn setup_button(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        })
-        .with_children(|parent| {
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(30.0),
-                        height: Val::Px(10.0),
-                        border: UiRect::all(Val::Px(1.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BorderColor(Color::WHITE),
-                    BackgroundColor(Color::BLACK),
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("hello"),
-                        TextColor(Color::WHITE),
-                        TextFont {
-                            font: asset_server.load("pico-8.ttf"),
-                            font_size: 6.0,
-                            ..default()
-                        },
-                    ));
-                });
-        });
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
+enum AppState {
+    #[default]
+    Artifacting,
+    Clean,
 }
 
-fn setup_mesh(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+#[derive(Component)]
+#[require(Text2d)]
+struct WindowStatus;
+
+fn setup(mut commands: Commands, window: Single<&Window, With<PrimaryWindow>>) {
+    commands.spawn(Camera2d);
+
     commands.spawn((
-        Mesh2d(meshes.add(Capsule2d::default()).into()),
-        MeshMaterial2d(materials.add(Color::BLACK)),
-        Transform::from_xyz(40., 0., 2.).with_scale(Vec3::splat(32.)),
-        Rotate,
-        PIXEL_PERFECT_LAYERS,
+        Text2d::new("Press space to switch sprite"),
+        Transform::from_xyz(0.0, 330.0, 0.0),
+    ));
+
+    commands.spawn((
+        WindowStatus,
+        Text2d::new(format!(
+            "Window size: {}x{}",
+            window.size().x,
+            window.size().y
+        )),
+        Transform::from_xyz(0.0, 250.0, 0.0),
     ));
 }
 
-fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let canvas_size = Extent3d {
-        width: RES_WIDTH,
-        height: RES_HEIGHT,
-        ..default()
-    };
-
-    // this Image serves as a canvas representing the low-resolution game screen
-    let mut canvas = Image {
-        texture_descriptor: TextureDescriptor {
-            label: None,
-            size: canvas_size,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Bgra8UnormSrgb,
-            mip_level_count: 1,
-            sample_count: 1,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        },
-        ..default()
-    };
-
-    // fill image.data with zeroes
-    canvas.resize(canvas_size);
-
-    let image_handle = images.add(canvas);
-
-    // this camera renders whatever is on `PIXEL_PERFECT_LAYERS` to the canvas
+fn setup_artifacting_texture(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
-        Camera2d,
-        Camera {
-            // render before the "main pass" camera
-            order: -1,
-            target: RenderTarget::Image(image_handle.clone()),
-            ..default()
-        },
-        Msaa::Off,
-        InGameCamera,
-        IsDefaultUiCamera,
-        PIXEL_PERFECT_LAYERS,
+        Text2d::new("Sprite dimension: 480x270"),
+        Transform::from_xyz(0.0, 200.0, 0.0),
+        StateScoped(AppState::Artifacting),
     ));
 
-    // spawn the canvas
-    commands.spawn((Sprite::from_image(image_handle), Canvas, HIGH_RES_LAYERS));
-
-    // the "outer" camera renders whatever is on `HIGH_RES_LAYERS` to the screen.
-    // here, the canvas and one of the sample sprites will be rendered by this camera
-    commands.spawn((Camera2d, OuterCamera, Msaa::Off, HIGH_RES_LAYERS));
+    commands.spawn((
+        Sprite::from_image(asset_server.load("grid_480x270.png")),
+        StateScoped(AppState::Artifacting),
+    ));
 }
 
-/// Scales camera projection to fit the window (integer multiples only).
-fn fit_canvas(
-    mut resize_events: EventReader<WindowResized>,
-    mut projections: Query<&mut OrthographicProjection, With<OuterCamera>>,
+fn setup_clean_texture(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Text2d::new("Sprite dimension: 512x256"),
+        Transform::from_xyz(0.0, 200.0, 0.0),
+        StateScoped(AppState::Clean),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("grid_512x256.png")),
+        StateScoped(AppState::Clean),
+    ));
+}
+
+fn toggle_state(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    app_state: Res<State<AppState>>,
+    mut next_app_state: ResMut<NextState<AppState>>,
 ) {
-    for event in resize_events.read() {
-        let h_scale = event.width / RES_WIDTH as f32;
-        let v_scale = event.height / RES_HEIGHT as f32;
-        let mut projection = projections.single_mut();
-        projection.scale = 1. / h_scale.min(v_scale).round();
+    if keyboard_input.just_pressed(KeyCode::Space) {
+        match app_state.get() {
+            AppState::Artifacting => next_app_state.set(AppState::Clean),
+            AppState::Clean => next_app_state.set(AppState::Artifacting),
+        }
+    }
+}
+
+fn update_window_status(
+    mut status: Single<&mut Text2d, With<WindowStatus>>,
+    mut resize_reader: EventReader<WindowResized>,
+) {
+    if let Some(resize) = resize_reader.read().last() {
+        status.0 = format!("Window size: {}x{}", resize.width, resize.height);
     }
 }
