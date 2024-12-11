@@ -1417,6 +1417,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "camera_texture_bug"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3946,13 +3953,6 @@ name = "typeid"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "059d83cc991e7a42fc37bd50941885db0888e34209f8cfd9aab07ddec03bc9cf"
-
-[[package]]
-name = "ui_texture_bug"
-version = "0.1.0"
-dependencies = [
- "bevy",
-]
 
 [[package]]
 name = "unicode-bidi"

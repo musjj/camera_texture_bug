@@ -1,5 +1,5 @@
 [package]
-name = "ui_texture_bug"
+name = "camera_texture_bug"
 version = "0.1.0"
 edition = "2021"
 
